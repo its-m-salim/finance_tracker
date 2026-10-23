@@ -226,39 +226,75 @@ async def command_goals(message: Message, command: CommandObject):
 async def add_task(message: Message, command: CommandObject):
     if not command.args:
         await message.answer("""Для команды нужны сумма, тип записи и описание.
-Пример: /add_goal 5000/credit/Аренда квартиры""")
+Пример: /add_goal 5000/Аренда квартиры""")
         return
     data = command.args.split("/")
-    if len(data) < 3:
-        await message.answer("""Не хватает аргументов. Укажи сумму, тип записи и описание.
-Пример: /add_goal 5000/credit/Аренда квартиры""")
+    if len(data) < 2:
+        await message.answer("""Не хватает аргументов. Укажи сумму и описание.
+Пример: /add_goal 5000/Аренда квартиры""")
         return
-    if len(data) > 3:
-        await message.answer("""Слишком много аргументов. Нужны только сумма, тип записи и описание.
-Пример: /add_goal 5000/credit/Аренда квартиры""")
+    if len(data) > 2:
+        await message.answer("""Слишком много аргументов. Нужны только сумма  и описание.
+Пример: /add_goal 5000/Аренда квартиры""")
         return
     error = check_amount(data[0])
     if error:
         await message.answer(error)
         return
     amount = int(data[0])
-    goal_type = data[1].strip().lower()
-    if goal_type not in ("goal", "credit"):
-        await message.answer("""Для типа записи укажи goal (финансовая цель) или credit (долг).""")
-        return
-    caption = data[2].strip()
+    caption = data[1].strip()
     if not caption:
         await message.answer("""Описание не может быть пустым.""")
         return
-    if await create_goal(goal_type, caption, amount, message.from_user.id):
+    if await create_goal(caption, amount, message.from_user.id):
+        await message.answer("✅ Запись успешно создана!")
+    else:
+        await message.answer("""Не удалось создать запись. Проверь введённые данные.""")
+
+
+@dp.message(Command("add_credit"))
+async def add_task(message: Message, command: CommandObject):
+    if not command.args:
+        await message.answer("""Для команды нужны сумма, тип записи и описание.
+Пример: /add_credit 5000/Аренда квартиры""")
+        return
+    data = command.args.split("/")
+    if len(data) < 2:
+        await message.answer("""Не хватает аргументов. Укажи сумму и описание.
+Пример: /add_credit 5000/Аренда квартиры""")
+        return
+    if len(data) > 2:
+        await message.answer("""Слишком много аргументов. Нужны только сумма  и описание.
+Пример: /add_credit 5000/Аренда квартиры""")
+        return
+    error = check_amount(data[0])
+    if error:
+        await message.answer(error)
+        return
+    amount = int(data[0])
+    caption = data[1].strip()
+    if not caption:
+        await message.answer("""Описание не может быть пустым.""")
+        return
+    if await create_credit(caption, amount, message.from_user.id):
         await message.answer("✅ Запись успешно создана!")
     else:
         await message.answer("""Не удалось создать запись. Проверь введённые данные.""")
 
 
 
+
+
+
+
+
+
+
+
+
+
 @dp.message(Command("pay_goal"))
-async def add_task(message: Message, command: CommandObject):
+async def pay(message: Message, command: CommandObject):
     if not command.args:
         await message.answer("""Для команды нужны  id и сумма
 Пример: /pay_goal 1/100""")
@@ -276,13 +312,61 @@ async def add_task(message: Message, command: CommandObject):
     if error:
         await message.answer(error)
         return
-    amount = int(data[0])
+    user = await profile(message.from_user.id)
+    amount = int(data[1])
+    active = await get_active(message.from_user.id, data[0])
+    if not active["is_active"]:
+        await message.answer("Этот цель уже достигнут")
+        return
+    if active["amount"] < active["current_amount"] + amount:
+        await message.answer("Слишком много денег!")
+        return
+    
     if await pay_goal(amount , data[0], message.from_user.id,):
         await message.answer("✅ Запись успешно создана!")
+        if await get_status(message.from_user.id, data[0]):
+            await message.answer("Вы успешно достигли своего целя")
     else:
         await message.answer("""Не удалось создать запись. Проверь введённые данные.""")
 
 
+
+@dp.message(Command("repay"))
+async def repayments(message: Message, command: CommandObject):
+    if not command.args:
+        await message.answer("""Для команды нужны  id и сумма
+Пример: /repay 1/100""")
+        return
+    data = command.args.split("/")
+    if len(data) < 2:
+        await message.answer("""Не хватает аргументов. Укажи id и  сумму.
+Пример: /repay 1/100""")
+        return
+    if len(data) > 2:
+        await message.answer("""Слишком много аргументов. Нужны только id и сумма.
+Пример: /repay 1/100""")
+        return
+    error = check_amount(data[1])
+    if error:
+        await message.answer(error)
+        return
+    amount = int(data[1])
+    active = await get_active(message.from_user.id, data[0])
+    if not active["is_active"]:
+        await message.answer("Этот цель уже достигнут")
+        return
+    if active["amount"] < active["current_amount"] + amount:
+        await message.answer("Слишком много денег!")
+        return
+    user = await profile(message.from_user.id)
+    
+    if user["balance"] < amount:
+        await message.answer("""На балансе недостаточно средств для этой операции.""")
+        return
+    if await repayments(amount , data[0], message.from_user.id,):
+        await message.answer("✅ Запись успешно создана!")
+    else:
+        await message.answer("""Не удалось создать запись. Проверь введённые данные.""")
 
 
 
