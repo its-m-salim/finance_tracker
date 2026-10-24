@@ -260,13 +260,18 @@ async def command_goals(message: Message, command: CommandObject):
         item_type = "Финансовая цель" if tr["type"] == "goal" else "Долг"
         progress_label = "Накоплено" if tr["type"] == "goal" else "Погашено"
         status_text = "Завершено" if tr["status"] else "В процессе"
+        status_display = (
+    f"Завершено в {tr['finished_at']}"
+    if status_text == "Завершено"
+    else status_text
+)
         text += f"""
 
 🆔 Запись №{tr['id']} · {item_type}
 📝 Название: {tr['caption']}
 💰 Сумма: {tr['amount']}
 📊 {progress_label}: {tr['current_amount']}
-📍 Статус: {status_text}
+📍 Статус: {status_display}
 🗓 Создано: {tr['created_at']}"""
     await message.answer(text)
 
@@ -363,6 +368,15 @@ async def pay(message: Message, command: CommandObject):
         return
     amount = int(data[1])
     active = await get_status(message.from_user.id, data[0])
+    if not active:
+        await message.answer("""
+Похоже такого целя по не существует
+Испльзуйте /add_goal чтобы добавить финансовый цель
+""")
+        return
+    if active["type"] != "goal":
+        await message.answer("Это не цель а долг!")
+        return
     if not active["is_active"]:
         await message.answer("Эта запись уже завершена. 🏆")
         return
@@ -375,7 +389,8 @@ async def pay(message: Message, command: CommandObject):
         await message.answer("""✅ Запись создана!
 
 Теперь её можно найти в списке /goals и отслеживать прогресс.""")
-        if await get_status(message.from_user.id, data[0]):
+        act =  await get_status(message.from_user.id, data[0])
+        if not act["is_active"]:
             await message.answer("🏆 Поздравляю! Цель достигнута!")
     else:
         await message.answer("""Не удалось создать запись. ⚠️
@@ -404,6 +419,15 @@ async def repayments(message: Message, command: CommandObject):
         return
     amount = int(data[1])
     active = await get_status(message.from_user.id, data[0])
+    if not active:
+        await message.answer("""
+    Похоже такого долга по не существует
+    Испльзуйте /add_credit чтобы добавить кредиты.
+    """)
+        return
+    if active["type"] != "credit":
+        await message.answer("Это не долг а цель!")
+        return
     if not active["is_active"]:
         await message.answer("Эта запись уже завершена. 🏆")
         return
@@ -421,6 +445,9 @@ async def repayments(message: Message, command: CommandObject):
         await message.answer("""✅ Запись создана!
 
 Теперь её можно найти в списке /goals и отслеживать прогресс.""")
+        act =  await get_status(message.from_user.id, data[0])
+        if not act["is_active"]:
+            await message.answer("🏆 Поздравляю! долг успешно  погашен!")
     else:
         await message.answer("""Не удалось создать запись. ⚠️
 Проверь сумму и описание, затем попробуй ещё раз.""")

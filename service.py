@@ -181,17 +181,27 @@ async def pay_goal_credit(amount, g_id, tg_id, goal_type):
             status = LEAST(current_amount + $1, amount) >= amount
         WHERE id = $2
         and telegram_id = $3
-        and type = $4
+        and type = $4;
+
 """, amount, int(g_id), str(tg_id), goal_type)
-        if result == "update 0":
+        if result == "UPDATE 0":
             return False
-        elif result == "update 1":
+        elif result == "UPDATE 1":
+            await conn.execute("""
+            update goals  
+            set is_active = false,
+            finished_at = current_timestamp
+            where status = true
+            and id = $1
+            and telegram_id = $2
+            and type = $3;
+""", int(g_id), str(tg_id), goal_type)
             if goal_type == "credit":
                 await conn.execute("""
                 insert into  transiction_h
                     (caption, type, telegram_id, amount)
                 values ($1, $2, $3, $4)
-                """, f"withdraw for credit", goal_type, str(tg_id), amount)
+                """, f"withdraw for credit", "withdraw", str(tg_id), amount)
             return True
     except Exception as error:
         print(f"{type(error)}: {error} s.py")
@@ -207,16 +217,6 @@ async def get_status(tg_id, goal_id):
         select * from goals
         where id = $1 and telegram_id = $2
 """, int(goal_id), str(tg_id))
-        if status:
-            await conn.execute("""
-        update goals 
-        set is_active = False
-        where id = $1 and telegram_id = $2
-""", int(goal_id), str(tg_id))
-        status = await conn.fetchrow("""
-                select * from goals
-                where id = $1 and telegram_id = $2
-        """, int(goal_id), str(tg_id))
         return status
     except Exception as error:
         print(f"{type(error)}: {error} s.py")     

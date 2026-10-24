@@ -56,6 +56,7 @@ async def create_tables():
             current_amount int not null default 0,
             created_at timestamp default now(),
             status bool not null default false,
+            finished_at timestamp,
             is_active bool default true,
             check (current_amount >= 0 and current_amount <= amount),
             check (status = (current_amount >= amount))
