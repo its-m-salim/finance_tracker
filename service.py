@@ -29,10 +29,10 @@ async def profile(tg_id):
         await conn.close()   
 
 
-async def make_transaction(caption, tg_id, amount, tr_type):
+async def make_transactions(caption, tg_id, amount, transaction_type):
     try:
         conn = await connection_db()
-        if tr_type == "withdraw":
+        if transaction_type == "withdraw":
             result = await conn.execute("""
                 update users
                 SET balance = balance - $1
@@ -54,7 +54,7 @@ async def make_transaction(caption, tg_id, amount, tr_type):
             insert into  transiction_h
                 (caption, type, telegram_id, amount)
             values ($1, $2, $3, $4)
-        """, caption, tr_type, str(tg_id), amount)
+        """, caption, transaction_type, str(tg_id), amount)
         return True
 
     except Exception as error:
@@ -67,7 +67,6 @@ async def make_transaction(caption, tg_id, amount, tr_type):
 
 async def get_transictions(tg_id):
     try:
-
         conn = await connection_db()
         transictions = await conn.fetch("""
         select * from transiction_h
@@ -93,7 +92,6 @@ async def get_tr_type(tg_id, type):
         print(f"{type(error)}: {error} s.py")     
     finally:
         await conn.close()   
-
 
 
 async def get_last_tr(tg_id):
@@ -128,13 +126,13 @@ async def get_biggest_tr(tg_id):
 
 
 
-async def create_goal(caption, amount, tg_id):
+async def create_goal_credit(caption, amount, tg_id, type):
     try:
         conn = await connection_db()
         await conn.execute("""
         insert into goals(type, caption, amount, telegram_id) values
             ($1, $2, $3, $4)
-""", "goal", caption, amount, str(tg_id))
+""", type, caption, amount, str(tg_id))
         return True
     except Exception as error:
         print(f"{type(error)}: {error} s.py")     
@@ -143,50 +141,22 @@ async def create_goal(caption, amount, tg_id):
 
 
 
-async def create_credit(caption, amount, tg_id):
+#либо принимает tuple с длиной 1 для получения всех типов , либо 2
+async def get_goals(tg_id, types, types2):
     try:
-        conn = await connection_db()
-        await conn.execute("""
-        insert into goals(type, caption, amount, telegram_id) values
-            ($1, $2, $3, $4)
-""", "credit", caption, amount, str(tg_id))
-        return True
-    except Exception as error:
-        print(f"{type(error)}: {error} s.py")     
-    finally:
-        await conn.close()   
-
-
-
-async def get_goals(tg_id):
-    try:
-
         conn = await connection_db()
         goals = await conn.fetch("""
         select * from goals
-        where telegram_id = $1
+        where telegram_id = $1 and (type = $2 or type = $3) 
         order by created_at desc, id desc
-""", str(tg_id))
+""", str(tg_id), types, types2)
         return goals
     except Exception as error:
-        print(f"{type(error)}: {error} s.py")     
+        print(f"{type(error)}: {error} sg.py")     
     finally:
         await conn.close()
 
 
-async def get_goals_type(tg_id, goal_type):
-    try:
-        conn = await connection_db()
-        goals = await conn.fetch("""
-        select * from goals
-        where telegram_id = $1 and type = $2
-        order by created_at desc, id desc
-""", str(tg_id), goal_type)
-        return goals
-    except Exception as error:
-        print(f"{type(error)}: {error} s.py")
-    finally:
-        await conn.close()   
 
 
 
@@ -202,7 +172,7 @@ def check_amount(text):
     return None
 
 
-async def pay_goal(amount, g_id, tg_id):
+async def pay_goal_credit(amount, g_id, tg_id, goal_type):
     try:
         conn = await connection_db()   
         result = await conn.execute("""
@@ -211,11 +181,17 @@ async def pay_goal(amount, g_id, tg_id):
             status = LEAST(current_amount + $1, amount) >= amount
         WHERE id = $2
         and telegram_id = $3
-        and type = 'goal'
-""", amount, int(g_id), str(tg_id))
+        and type = $4
+""", amount, int(g_id), str(tg_id), goal_type)
         if result == "update 0":
             return False
-        else:
+        elif result == "update 1":
+            if goal_type == "credit":
+                await conn.execute("""
+                insert into  transiction_h
+                    (caption, type, telegram_id, amount)
+                values ($1, $2, $3, $4)
+                """, f"withdraw for credit", goal_type, str(tg_id), amount)
             return True
     except Exception as error:
         print(f"{type(error)}: {error} s.py")
@@ -224,57 +200,25 @@ async def pay_goal(amount, g_id, tg_id):
         await conn.close()
 
 
-async def repayments(tg_id, g_id, amount):
-    try:
-        conn = await connection_db()
-        result = await conn.execute("""
-        UPDATE goals
-        SET current_amount = LEAST(current_amount + $1, amount),
-            status = LEAST(current_amount + $1, amount) >= amount
-        where id = $2
-        and telegram_id = $3
-        and type = 'credit'
-""", amount, g_id, str(tg_id))
-        if result == "update 0":
-            return False
-        else:
-            return True
-    except Exception as error:
-        print(f"{type(error)}: {error} s.py")     
-    finally:
-        await conn.close()
-
-
-
-
-async def get_status(tg_id, g_id):
+async def get_status(tg_id, goal_id):
     try:
         conn = await connection_db()
         status = await conn.fetchrow("""
-        select status from goals
+        select * from goals
         where id = $1 and telegram_id = $2
-""", int(g_id), str(tg_id))
+""", int(goal_id), str(tg_id))
         if status:
             await conn.execute("""
-        update goals
+        update goals 
         set is_active = False
         where id = $1 and telegram_id = $2
-""", int(g_id), str(tg_id))
-            return status
+""", int(goal_id), str(tg_id))
+        status = await conn.fetchrow("""
+                select * from goals
+                where id = $1 and telegram_id = $2
+        """, int(goal_id), str(tg_id))
+        return status
     except Exception as error:
         print(f"{type(error)}: {error} s.py")     
-    finally:
-        await conn.close()   
-
-async def get_active(tg_id, g_id):
-    try:
-        conn = await connection_db()
-        active = await conn.fetchrow("""
-        select is_active, amount, current_amount from goals
-        where id = $1 and telegram_id = $2
-        """, int(g_id), str(tg_id))
-        return active
-    except Exception as error:
-        print(f"{type(error)}: {error} con.py")     
     finally:
         await conn.close()   

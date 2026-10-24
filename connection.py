@@ -62,7 +62,7 @@ async def create_tables():
                 );
 
 """)
-        print("Tables created successfuly!")
+        print("Таблицы базы данных успешно проверены/созданы.")
     except Exception as error:
         print(f"{type(error)}: {error} con.py")     
     finally:
